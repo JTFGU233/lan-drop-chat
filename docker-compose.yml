@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  lan-drop-chat:
+    build: .
+    container_name: lan-drop-chat
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production

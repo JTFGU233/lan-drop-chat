@@ -1,0 +1,2067 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LAN-Drop-Chat</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root {
+            --accent: #1f9d55;
+            --accent-strong: #168647;
+            --accent-soft: rgba(31, 157, 85, 0.14);
+            --bg-color: #f4f5f7;
+            --bg-glow-1: rgba(31, 157, 85, 0.16);
+            --bg-glow-2: rgba(17, 24, 39, 0.06);
+            --surface-color: rgba(255, 255, 255, 0.72);
+            --surface-elevated: rgba(255, 255, 255, 0.88);
+            --surface-strong: rgba(255, 255, 255, 0.94);
+            --surface-border: rgba(15, 23, 42, 0.08);
+            --surface-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+            --surface-shadow-strong: 0 24px 64px rgba(15, 23, 42, 0.14);
+            --text-primary: #111827;
+            --text-secondary: #667085;
+            --text-tertiary: #98a2b3;
+            --menu-bg: rgba(255, 255, 255, 0.84);
+            --menu-border: rgba(15, 23, 42, 0.08);
+            --sidebar-bg: rgba(255, 255, 255, 0.94);
+            --sidebar-backdrop: rgba(15, 23, 42, 0.26);
+            --composer-bg: rgba(255, 255, 255, 0.92);
+            --composer-border: rgba(15, 23, 42, 0.08);
+            --input-bg: rgba(15, 23, 42, 0.04);
+            --input-text: #111827;
+            --bubble-self: #daf2e2;
+            --bubble-other: rgba(255, 255, 255, 0.98);
+            --bubble-system: rgba(15, 23, 42, 0.05);
+            --bubble-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+            --media-bg: #eef2f4;
+            --file-link-bg: rgba(15, 23, 42, 0.05);
+            --progress-track: rgba(15, 23, 42, 0.08);
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --drag-overlay-bg: rgba(15, 23, 42, 0.42);
+            --drag-card-bg: rgba(255, 255, 255, 0.18);
+            --drag-card-border: rgba(255, 255, 255, 0.64);
+            --theme-option-bg: rgba(15, 23, 42, 0.04);
+            --theme-option-active-bg: rgba(31, 157, 85, 0.14);
+            --theme-option-active-border: rgba(31, 157, 85, 0.28);
+            --theme-option-active-text: #125c32;
+            --frame-padding: clamp(16px, 3.5vw, 40px);
+            --lane-width: 1120px;
+            --sidebar-width: min(88vw, 360px);
+            --composer-height: 58px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #121212;
+                --bg-glow-1: rgba(31, 157, 85, 0.18);
+                --bg-glow-2: rgba(255, 255, 255, 0.04);
+                --surface-color: rgba(24, 24, 24, 0.58);
+                --surface-elevated: rgba(24, 24, 24, 0.82);
+                --surface-strong: rgba(20, 20, 20, 0.94);
+                --surface-border: rgba(255, 255, 255, 0.08);
+                --surface-shadow: 0 22px 56px rgba(0, 0, 0, 0.36);
+                --surface-shadow-strong: 0 26px 72px rgba(0, 0, 0, 0.42);
+                --text-primary: #f5f5f5;
+                --text-secondary: #a1a1aa;
+                --text-tertiary: #71717a;
+                --menu-bg: rgba(24, 24, 24, 0.88);
+                --menu-border: rgba(255, 255, 255, 0.08);
+                --sidebar-bg: rgba(18, 18, 18, 0.96);
+                --sidebar-backdrop: rgba(0, 0, 0, 0.52);
+                --composer-bg: rgba(18, 18, 18, 0.92);
+                --composer-border: rgba(255, 255, 255, 0.08);
+                --input-bg: rgba(255, 255, 255, 0.05);
+                --input-text: #f5f5f5;
+                --bubble-self: #163728;
+                --bubble-other: #1e1e1e;
+                --bubble-system: rgba(255, 255, 255, 0.06);
+                --bubble-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+                --media-bg: #202427;
+                --file-link-bg: rgba(255, 255, 255, 0.05);
+                --progress-track: rgba(255, 255, 255, 0.08);
+                --drag-overlay-bg: rgba(0, 0, 0, 0.58);
+                --drag-card-bg: rgba(255, 255, 255, 0.08);
+                --drag-card-border: rgba(255, 255, 255, 0.3);
+                --theme-option-bg: rgba(255, 255, 255, 0.05);
+                --theme-option-active-bg: rgba(31, 157, 85, 0.18);
+                --theme-option-active-border: rgba(31, 157, 85, 0.28);
+                --theme-option-active-text: #daf2e2;
+            }
+
+            html {
+                color-scheme: dark;
+            }
+        }
+
+        html[data-theme="light"] {
+            color-scheme: light;
+            --bg-color: #f4f5f7;
+            --bg-glow-1: rgba(31, 157, 85, 0.16);
+            --bg-glow-2: rgba(17, 24, 39, 0.06);
+            --surface-color: rgba(255, 255, 255, 0.72);
+            --surface-elevated: rgba(255, 255, 255, 0.88);
+            --surface-strong: rgba(255, 255, 255, 0.94);
+            --surface-border: rgba(15, 23, 42, 0.08);
+            --surface-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+            --surface-shadow-strong: 0 24px 64px rgba(15, 23, 42, 0.14);
+            --text-primary: #111827;
+            --text-secondary: #667085;
+            --text-tertiary: #98a2b3;
+            --menu-bg: rgba(255, 255, 255, 0.84);
+            --menu-border: rgba(15, 23, 42, 0.08);
+            --sidebar-bg: rgba(255, 255, 255, 0.94);
+            --sidebar-backdrop: rgba(15, 23, 42, 0.26);
+            --composer-bg: rgba(255, 255, 255, 0.92);
+            --composer-border: rgba(15, 23, 42, 0.08);
+            --input-bg: rgba(15, 23, 42, 0.04);
+            --input-text: #111827;
+            --bubble-self: #daf2e2;
+            --bubble-other: rgba(255, 255, 255, 0.98);
+            --bubble-system: rgba(15, 23, 42, 0.05);
+            --bubble-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+            --media-bg: #eef2f4;
+            --file-link-bg: rgba(15, 23, 42, 0.05);
+            --progress-track: rgba(15, 23, 42, 0.08);
+            --drag-overlay-bg: rgba(15, 23, 42, 0.42);
+            --drag-card-bg: rgba(255, 255, 255, 0.18);
+            --drag-card-border: rgba(255, 255, 255, 0.64);
+            --theme-option-bg: rgba(15, 23, 42, 0.04);
+            --theme-option-active-bg: rgba(31, 157, 85, 0.14);
+            --theme-option-active-border: rgba(31, 157, 85, 0.28);
+            --theme-option-active-text: #125c32;
+        }
+
+        html[data-theme="dark"] {
+            color-scheme: dark;
+            --bg-color: #121212;
+            --bg-glow-1: rgba(31, 157, 85, 0.18);
+            --bg-glow-2: rgba(255, 255, 255, 0.04);
+            --surface-color: rgba(24, 24, 24, 0.58);
+            --surface-elevated: rgba(24, 24, 24, 0.82);
+            --surface-strong: rgba(20, 20, 20, 0.94);
+            --surface-border: rgba(255, 255, 255, 0.08);
+            --surface-shadow: 0 22px 56px rgba(0, 0, 0, 0.36);
+            --surface-shadow-strong: 0 26px 72px rgba(0, 0, 0, 0.42);
+            --text-primary: #f5f5f5;
+            --text-secondary: #a1a1aa;
+            --text-tertiary: #71717a;
+            --menu-bg: rgba(24, 24, 24, 0.88);
+            --menu-border: rgba(255, 255, 255, 0.08);
+            --sidebar-bg: rgba(18, 18, 18, 0.96);
+            --sidebar-backdrop: rgba(0, 0, 0, 0.52);
+            --composer-bg: rgba(18, 18, 18, 0.92);
+            --composer-border: rgba(255, 255, 255, 0.08);
+            --input-bg: rgba(255, 255, 255, 0.05);
+            --input-text: #f5f5f5;
+            --bubble-self: #163728;
+            --bubble-other: #1e1e1e;
+            --bubble-system: rgba(255, 255, 255, 0.06);
+            --bubble-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+            --media-bg: #202427;
+            --file-link-bg: rgba(255, 255, 255, 0.05);
+            --progress-track: rgba(255, 255, 255, 0.08);
+            --drag-overlay-bg: rgba(0, 0, 0, 0.58);
+            --drag-card-bg: rgba(255, 255, 255, 0.08);
+            --drag-card-border: rgba(255, 255, 255, 0.3);
+            --theme-option-bg: rgba(255, 255, 255, 0.05);
+            --theme-option-active-bg: rgba(31, 157, 85, 0.18);
+            --theme-option-active-border: rgba(31, 157, 85, 0.28);
+            --theme-option-active-text: #daf2e2;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: "Avenir Next", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            color: var(--text-primary);
+            background:
+                radial-gradient(circle at top left, var(--bg-glow-1), transparent 26%),
+                radial-gradient(circle at bottom right, var(--bg-glow-2), transparent 34%),
+                var(--bg-color);
+        }
+
+        button,
+        textarea,
+        input {
+            font: inherit;
+        }
+
+        button {
+            color: inherit;
+        }
+
+        #app {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            display: grid;
+            grid-template-rows: 1fr auto auto;
+            position: relative;
+        }
+
+        #menu-btn {
+            position: fixed;
+            top: calc(env(safe-area-inset-top, 0px) + 16px);
+            left: calc(env(safe-area-inset-left, 0px) + 16px);
+            width: 54px;
+            height: 54px;
+            border: 1px solid var(--menu-border);
+            border-radius: 18px;
+            background: var(--menu-bg);
+            backdrop-filter: blur(20px);
+            box-shadow: var(--surface-shadow);
+            display: inline-flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            z-index: 40;
+            transition: transform 0.22s ease, opacity 0.22s ease, background-color 0.22s ease;
+        }
+
+        #menu-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        #menu-btn span {
+            width: 20px;
+            height: 2px;
+            border-radius: 999px;
+            background: var(--text-primary);
+            transition: transform 0.22s ease, opacity 0.22s ease;
+        }
+
+        body.sidebar-open #menu-btn {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(-8px);
+        }
+
+        #sidebar-backdrop {
+            position: fixed;
+            inset: 0;
+            background: var(--sidebar-backdrop);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.24s ease;
+            z-index: 44;
+        }
+
+        body.sidebar-open #sidebar-backdrop {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: var(--sidebar-width);
+            padding:
+                calc(env(safe-area-inset-top, 0px) + 18px)
+                18px
+                calc(env(safe-area-inset-bottom, 0px) + 18px);
+            background: var(--sidebar-bg);
+            backdrop-filter: blur(24px);
+            border-right: 1px solid var(--surface-border);
+            box-shadow: var(--surface-shadow-strong);
+            transform: translateX(-108%);
+            transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            z-index: 48;
+            display: flex;
+        }
+
+        body.sidebar-open #sidebar {
+            transform: translateX(0);
+        }
+
+        .sidebar-shell {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding-right: 2px;
+        }
+
+        .sidebar-close-row {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        #sidebar-close {
+            width: 40px;
+            height: 40px;
+            border: 1px solid var(--surface-border);
+            border-radius: 14px;
+            background: var(--surface-color);
+            cursor: pointer;
+        }
+
+        .sidebar-panel {
+            padding: 18px;
+            border-radius: 24px;
+            border: 1px solid var(--surface-border);
+            background: var(--surface-elevated);
+            box-shadow: var(--surface-shadow);
+        }
+
+        .brand-panel {
+            padding: 20px;
+            background:
+                linear-gradient(180deg, rgba(31, 157, 85, 0.12) 0%, transparent 100%),
+                var(--surface-elevated);
+        }
+
+        .brand-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 52px;
+            height: 30px;
+            padding: 0 12px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent-strong);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+        }
+
+        .brand-panel h1 {
+            margin: 14px 0 8px;
+            font-size: 28px;
+            line-height: 1.04;
+            letter-spacing: -0.05em;
+        }
+
+        .brand-panel p {
+            margin: 0;
+            color: var(--text-secondary);
+            line-height: 1.65;
+            font-size: 14px;
+        }
+
+        .sidebar-panel h2 {
+            margin: 0 0 14px;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .sidebar-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .sidebar-panel-header h2 {
+            margin: 0;
+        }
+
+        .sidebar-meta-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            height: 28px;
+            padding: 0 10px;
+            border-radius: 999px;
+            background: var(--theme-option-bg);
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .sidebar-hint {
+            margin: 10px 0 0;
+            color: var(--text-secondary);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .theme-switcher {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .theme-option {
+            min-height: 48px;
+            border-radius: 16px;
+            border: 1px solid transparent;
+            background: var(--theme-option-bg);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .theme-option:hover {
+            transform: translateY(-1px);
+        }
+
+        .theme-option.active {
+            background: var(--theme-option-active-bg);
+            border-color: var(--theme-option-active-border);
+            color: var(--theme-option-active-text);
+        }
+
+        #cleanup-btn {
+            width: 100%;
+            min-height: 52px;
+            border: none;
+            border-radius: 18px;
+            background: var(--danger);
+            color: #ffffff;
+            cursor: pointer;
+            box-shadow: 0 14px 28px rgba(239, 68, 68, 0.22);
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+
+        #cleanup-btn:hover {
+            transform: translateY(-1px);
+            background: var(--danger-hover);
+        }
+
+        #clear-history-btn {
+            width: 100%;
+            min-height: 52px;
+            border: 1px solid var(--surface-border);
+            border-radius: 18px;
+            background: var(--theme-option-bg);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        #clear-history-btn:hover {
+            transform: translateY(-1px);
+            background: var(--surface-color);
+        }
+
+        .sidebar-action-stack {
+            display: grid;
+            gap: 12px;
+        }
+
+        .favorites-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .favorite-empty {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .favorite-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: start;
+        }
+
+        .favorite-card {
+            min-width: 0;
+            padding: 14px 15px;
+            border: 1px solid var(--surface-border);
+            border-radius: 18px;
+            background: var(--theme-option-bg);
+            cursor: pointer;
+            text-align: left;
+            transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .favorite-card:hover {
+            transform: translateY(-1px);
+            background: var(--surface-color);
+        }
+
+        .favorite-card strong {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--accent-strong);
+        }
+
+        .favorite-card p {
+            margin: 0;
+            color: var(--text-primary);
+            line-height: 1.6;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+
+        .favorite-card time {
+            display: block;
+            margin-top: 10px;
+            color: var(--text-tertiary);
+            font-size: 12px;
+        }
+
+        .favorite-delete {
+            width: 40px;
+            height: 40px;
+            border: 1px solid var(--surface-border);
+            border-radius: 14px;
+            background: var(--theme-option-bg);
+            color: var(--text-secondary);
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .favorite-delete:hover {
+            transform: translateY(-1px);
+            background: rgba(239, 68, 68, 0.14);
+            color: var(--danger);
+        }
+
+        .shortcut-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            gap: 10px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .shortcut-list li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            line-height: 1.5;
+        }
+
+        .shortcut-list li::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--accent);
+            flex-shrink: 0;
+        }
+
+        #chat-stage {
+            min-height: 0;
+            padding: 0 var(--frame-padding);
+            display: flex;
+        }
+
+        #messages {
+            width: min(100%, var(--lane-width));
+            flex: 1;
+            margin: 0 auto;
+            padding:
+                calc(env(safe-area-inset-top, 0px) + 24px)
+                clamp(12px, 2.6vw, 28px)
+                26px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            scrollbar-width: thin;
+            overscroll-behavior: contain;
+        }
+
+        .message {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-width: min(74%, 760px);
+        }
+
+        .message.self {
+            align-self: flex-end;
+        }
+
+        .message.other {
+            align-self: flex-start;
+        }
+
+        .message.system {
+            align-self: center;
+            max-width: min(100%, 720px);
+            text-align: center;
+        }
+
+        .msg-info {
+            padding: 0 4px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+
+        .message.self .msg-info {
+            text-align: right;
+        }
+
+        .message.system .msg-info {
+            text-align: center;
+        }
+
+        .msg-bubble {
+            position: relative;
+            padding: 14px 16px;
+            border-radius: 24px;
+            border: 1px solid var(--surface-border);
+            background: var(--bubble-other);
+            box-shadow: var(--bubble-shadow);
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.68;
+            font-size: 15px;
+            overflow: hidden;
+        }
+
+        .msg-bubble.has-message-action {
+            padding-right: 54px;
+        }
+
+        .message.self .msg-bubble {
+            background: var(--bubble-self);
+            border-bottom-right-radius: 10px;
+        }
+
+        .message.other .msg-bubble {
+            border-bottom-left-radius: 10px;
+        }
+
+        .message.system .msg-bubble {
+            background: var(--bubble-system);
+            box-shadow: none;
+            border-style: dashed;
+            border-radius: 18px;
+            color: var(--text-secondary);
+        }
+
+        .msg-text {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .favorite-action {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 32px;
+            height: 32px;
+            border: 1px solid var(--surface-border);
+            border-radius: 12px;
+            background: var(--surface-strong);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            line-height: 1;
+            transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+        }
+
+        .favorite-action:hover {
+            transform: translateY(-1px);
+        }
+
+        .favorite-action.active {
+            background: var(--accent-soft);
+            color: var(--accent-strong);
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+            .favorite-action {
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            .message:hover .favorite-action,
+            .favorite-action.active {
+                opacity: 1;
+                pointer-events: auto;
+            }
+        }
+
+        .msg-bubble img,
+        .msg-bubble video {
+            display: block;
+            width: auto;
+            max-width: min(300px, 100%);
+            max-height: 300px;
+            object-fit: contain;
+            border-radius: 18px;
+            background: var(--media-bg);
+            cursor: pointer;
+        }
+
+        .msg-bubble video {
+            cursor: default;
+        }
+
+        .file-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: var(--file-link-bg);
+            color: var(--text-primary);
+            text-decoration: none;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .file-link::before {
+            content: "附件";
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 38px;
+            height: 24px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent-strong);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+        }
+
+        .file-placeholder {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        #upload-progress-container {
+            display: none;
+            padding: 0 var(--frame-padding) 10px;
+        }
+
+        .upload-progress-card {
+            width: min(100%, var(--lane-width));
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 14px 16px;
+            border-radius: 22px;
+            border: 1px solid var(--surface-border);
+            background: var(--surface-strong);
+            box-shadow: var(--surface-shadow);
+        }
+
+        .upload-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        #progress-file {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #progress-bar {
+            width: 100%;
+            height: 6px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: var(--progress-track);
+        }
+
+        #progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent) 0%, #4ec77b 100%);
+            transition: width 0.12s linear;
+        }
+
+        footer {
+            padding:
+                0
+                var(--frame-padding)
+                calc(env(safe-area-inset-bottom, 0px) + 16px);
+            position: sticky;
+            bottom: 0;
+            z-index: 20;
+            background:
+                linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, var(--bg-color) 34%, var(--bg-color) 100%);
+        }
+
+        .composer {
+            width: min(100%, var(--lane-width));
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: end;
+            gap: 12px;
+            padding: 14px;
+            border-radius: 28px;
+            border: 1px solid var(--composer-border);
+            background: var(--composer-bg);
+            backdrop-filter: blur(20px);
+            box-shadow: var(--surface-shadow);
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .icon-btn,
+        #send-btn {
+            min-width: var(--composer-height);
+            height: var(--composer-height);
+            border: none;
+            border-radius: 18px;
+            cursor: pointer;
+            transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .icon-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--input-bg);
+            color: var(--text-primary);
+            font-size: 26px;
+            user-select: none;
+        }
+
+        .icon-btn:hover,
+        #send-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        #message-input {
+            width: 100%;
+            min-height: var(--composer-height);
+            max-height: 180px;
+            padding: 16px 18px;
+            border: none;
+            outline: none;
+            resize: none;
+            border-radius: 20px;
+            background: var(--input-bg);
+            color: var(--input-text);
+            line-height: 1.6;
+            overflow-y: auto;
+        }
+
+        #message-input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        #send-btn {
+            padding: 0 20px;
+            background: linear-gradient(135deg, var(--accent) 0%, #49c376 100%);
+            color: #ffffff;
+            font-weight: 600;
+            box-shadow: 0 12px 24px rgba(31, 157, 85, 0.24);
+        }
+
+        #drag-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: var(--drag-overlay-bg);
+            backdrop-filter: blur(10px);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.18s ease, visibility 0.18s ease;
+            z-index: 90;
+        }
+
+        #drag-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #toast {
+            position: fixed;
+            left: 50%;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+            transform: translate(-50%, 16px);
+            min-width: min(88vw, 220px);
+            max-width: min(88vw, 360px);
+            padding: 12px 16px;
+            border-radius: 16px;
+            background: var(--surface-strong);
+            border: 1px solid var(--surface-border);
+            box-shadow: var(--surface-shadow-strong);
+            color: var(--text-primary);
+            text-align: center;
+            font-size: 14px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            z-index: 95;
+        }
+
+        #toast.visible {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        .drag-overlay-card {
+            width: min(100%, 420px);
+            padding: 30px 26px;
+            border-radius: 28px;
+            border: 2px dashed var(--drag-card-border);
+            background: var(--drag-card-bg);
+            color: #ffffff;
+            text-align: center;
+            box-shadow: var(--surface-shadow-strong);
+        }
+
+        .drag-overlay-card strong {
+            display: block;
+            font-size: 24px;
+            line-height: 1.2;
+            margin-bottom: 10px;
+        }
+
+        .drag-overlay-card span {
+            display: block;
+            font-size: 14px;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        @media (max-width: 900px) {
+            .message {
+                max-width: 88%;
+            }
+        }
+
+        @media (max-width: 720px) {
+            #messages {
+                padding-top: calc(env(safe-area-inset-top, 0px) + 104px);
+                padding-left: 12px;
+                padding-right: 12px;
+                gap: 16px;
+            }
+
+            .theme-switcher {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar-panel-header {
+                align-items: flex-start;
+            }
+
+            #menu-btn {
+                top: calc(env(safe-area-inset-top, 0px) + 12px);
+                left: calc(env(safe-area-inset-left, 0px) + 12px);
+                width: 48px;
+                height: 48px;
+                border-radius: 16px;
+            }
+
+            .message.other {
+                margin-left: 58px;
+                max-width: calc(100% - 58px);
+            }
+
+            .composer {
+                grid-template-columns: auto 1fr auto;
+                gap: 10px;
+                padding: 10px;
+                border-radius: 24px;
+            }
+
+            #send-btn {
+                grid-column: auto;
+                width: auto;
+                min-width: 84px;
+                height: 52px;
+                padding: 0 18px;
+            }
+
+            .icon-btn {
+                min-width: 52px;
+                height: 52px;
+                border-radius: 16px;
+                font-size: 24px;
+            }
+
+            #message-input {
+                min-height: 52px;
+                padding: 13px 16px;
+                border-radius: 18px;
+                font-size: 16px;
+            }
+
+            .favorite-action {
+                opacity: 1;
+                pointer-events: auto;
+            }
+        }
+
+        @media (max-width: 560px) {
+            :root {
+                --frame-padding: 10px;
+            }
+
+            #sidebar {
+                width: min(92vw, 360px);
+                padding-left: 14px;
+                padding-right: 14px;
+            }
+
+            #messages {
+                padding-top: calc(env(safe-area-inset-top, 0px) + 96px);
+            }
+
+            .message {
+                max-width: 100%;
+            }
+
+            .message.other {
+                margin-left: 54px;
+                max-width: calc(100% - 54px);
+            }
+
+            footer {
+                padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <button id="menu-btn" type="button" aria-label="打开侧边栏" aria-expanded="false" aria-controls="sidebar">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+
+        <div id="sidebar-backdrop" aria-hidden="true"></div>
+
+        <aside id="sidebar" aria-hidden="true">
+            <div class="sidebar-shell">
+                <div class="sidebar-close-row">
+                    <button id="sidebar-close" type="button" aria-label="关闭侧边栏">×</button>
+                </div>
+
+                <section class="sidebar-panel brand-panel">
+                    <span class="brand-badge">LAN</span>
+                    <h1>LAN-Drop-Chat</h1>
+                    <p>单人多端局域网纯 Web 传输工作流。消息、文件、截图和拖拽上传都集中在同一条局域网聊天流里。</p>
+                </section>
+
+                <section class="sidebar-panel">
+                    <h2>主题切换</h2>
+                    <div class="theme-switcher" role="group" aria-label="主题切换">
+                        <button class="theme-option" type="button" data-theme-option="system">跟随系统</button>
+                        <button class="theme-option" type="button" data-theme-option="light">日间</button>
+                        <button class="theme-option" type="button" data-theme-option="dark">夜间</button>
+                    </div>
+                    <p id="theme-status" class="sidebar-hint"></p>
+                </section>
+
+                <section class="sidebar-panel">
+                    <div class="sidebar-panel-header">
+                        <h2>收藏夹</h2>
+                        <span id="favorites-count" class="sidebar-meta-badge">0</span>
+                    </div>
+                    <p id="favorites-empty" class="favorite-empty">收藏文本消息后，这里会显示可直接复制的常驻内容。</p>
+                    <div id="favorites-list" class="favorites-list"></div>
+                </section>
+
+                <section class="sidebar-panel">
+                    <h2>数据管理</h2>
+                    <p class="sidebar-hint">清空聊天记录只删除消息流水，不删除上传文件，也不会影响收藏夹。</p>
+                    <div class="sidebar-action-stack">
+                        <button id="clear-history-btn" type="button">清空聊天记录</button>
+                        <button id="cleanup-btn" type="button">清理物理文件</button>
+                    </div>
+                </section>
+
+                <section class="sidebar-panel">
+                    <h2>使用提示</h2>
+                    <ul class="shortcut-list">
+                        <li>Enter 发送消息，Shift + Enter 换行</li>
+                        <li>直接拖拽文件到窗口即可上传</li>
+                        <li>截图后粘贴到页面会直接上传图片</li>
+                        <li>收藏文本后，可在侧边栏一键复制常用内容</li>
+                    </ul>
+                </section>
+            </div>
+        </aside>
+
+        <main id="chat-stage">
+            <div id="messages" aria-live="polite"></div>
+        </main>
+
+        <div id="upload-progress-container">
+            <div class="upload-progress-card">
+                <div class="upload-meta">
+                    <span id="progress-file">正在上传</span>
+                    <span id="progress-text">0%</span>
+                </div>
+                <div id="progress-bar">
+                    <div id="progress-fill"></div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div class="composer">
+                <label for="file-input" class="icon-btn" title="上传文件" aria-label="上传文件">+</label>
+                <input type="file" id="file-input" multiple>
+                <textarea id="message-input" placeholder="输入消息..." rows="1"></textarea>
+                <button id="send-btn" type="button">发送</button>
+            </div>
+        </footer>
+    </div>
+
+    <div id="drag-overlay" aria-hidden="true">
+        <div class="drag-overlay-card">
+            <strong>松开鼠标以上传</strong>
+            <span>文件将沿用现有上传流程并同步到聊天记录</span>
+        </div>
+    </div>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        const socket = io();
+        const menuBtn = document.getElementById('menu-btn');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+        const sidebarClose = document.getElementById('sidebar-close');
+        const themeButtons = Array.from(document.querySelectorAll('[data-theme-option]'));
+        const themeStatus = document.getElementById('theme-status');
+        const favoritesList = document.getElementById('favorites-list');
+        const favoritesEmpty = document.getElementById('favorites-empty');
+        const favoritesCount = document.getElementById('favorites-count');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const fileInput = document.getElementById('file-input');
+        const sendBtn = document.getElementById('send-btn');
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
+        const cleanupBtn = document.getElementById('cleanup-btn');
+        const progressContainer = document.getElementById('upload-progress-container');
+        const progressFill = document.getElementById('progress-fill');
+        const progressText = document.getElementById('progress-text');
+        const progressFile = document.getElementById('progress-file');
+        const dragOverlay = document.getElementById('drag-overlay');
+        const toast = document.getElementById('toast');
+
+        const CLEANUP_PLACEHOLDER = '[系统提示：该文件已被清理，释放本地空间]';
+        const LOCAL_IP_KEY = 'lan-drop-chat-ip';
+        const THEME_PREFERENCE_KEY = 'lan-drop-chat-theme-preference';
+        const MAX_PENDING_ACTION_AGE = 30000;
+        const TOAST_DURATION = 1800;
+
+        let myIp = localStorage.getItem(LOCAL_IP_KEY) || '';
+        let dragDepth = 0;
+        let uploadQueue = Promise.resolve();
+        let themePreference = localStorage.getItem(THEME_PREFERENCE_KEY) || 'system';
+        let favorites = [];
+        let favoritesBySourceId = new Map();
+        let toastTimer = null;
+        let isHistoryHydrating = true;
+
+        const systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const pendingLocalActions = [];
+
+        socket.on('history', (history) => {
+            isHistoryHydrating = true;
+            messagesDiv.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+
+            history.forEach((msg) => {
+                fragment.appendChild(createMessageElement(msg, { smoothMediaScroll: false }));
+            });
+
+            messagesDiv.appendChild(fragment);
+            scrollToBottom(false);
+            requestAnimationFrame(() => {
+                isHistoryHydrating = false;
+            });
+        });
+
+        socket.on('chat message', (msg) => {
+            identifySelfFromEcho(msg);
+            appendMessage(msg);
+            scrollToBottom(true);
+        });
+
+        socket.on('system cleanup', () => {
+            document.querySelectorAll('.message[data-has-file="true"]').forEach((messageEl) => {
+                markMessageAsCleaned(messageEl);
+            });
+            scrollToBottom(true);
+        });
+
+        socket.on('history cleared', () => {
+            messagesDiv.innerHTML = '';
+        });
+
+        socket.on('favorites updated', () => {
+            fetchFavorites();
+        });
+
+        function createMessageElement(msg, options = {}) {
+            const messageEl = document.createElement('article');
+            const bubble = document.createElement('div');
+            const info = document.createElement('div');
+            const canFavorite = isFavoritableMessage(msg);
+
+            messageEl.className = 'message';
+            messageEl.dataset.messageId = msg.id ? String(msg.id) : '';
+            messageEl.dataset.ip = msg.ip || '';
+            messageEl.dataset.content = msg.content || '';
+            messageEl.dataset.time = formatTime(msg.timestamp);
+            messageEl.dataset.system = isSystemMessage(msg) ? 'true' : 'false';
+            messageEl.dataset.hasFile = msg.file_url ? 'true' : 'false';
+            messageEl.dataset.favoriteEligible = canFavorite ? 'true' : 'false';
+
+            info.className = 'msg-info';
+            bubble.className = 'msg-bubble';
+
+            if (msg.file_url) {
+                bubble.appendChild(createFileNode(msg, options));
+            } else if (isSystemMessage(msg)) {
+                bubble.appendChild(createPlaceholderNode(msg.content));
+            } else {
+                const textNode = document.createElement('div');
+                textNode.className = 'msg-text';
+                textNode.textContent = msg.content || '';
+                bubble.appendChild(textNode);
+
+                if (canFavorite) {
+                    bubble.classList.add('has-message-action');
+                    bubble.appendChild(createFavoriteAction(msg.id));
+                }
+            }
+
+            messageEl.appendChild(info);
+            messageEl.appendChild(bubble);
+            applyMessageTone(messageEl);
+
+            return messageEl;
+        }
+
+        function createFileNode(msg, options = {}) {
+            const type = msg.file_type || '';
+            const smoothMediaScroll = options.smoothMediaScroll !== false;
+
+            if (type.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.src = msg.file_url;
+                img.loading = 'lazy';
+                img.decoding = 'async';
+                img.alt = extractFileName(msg.content);
+                img.addEventListener('click', () => {
+                    window.open(img.src, '_blank', 'noopener');
+                });
+                bindMediaAutoScroll(img, 'load', smoothMediaScroll);
+                return img;
+            }
+
+            if (type.startsWith('video/')) {
+                const video = document.createElement('video');
+                video.src = msg.file_url;
+                video.controls = true;
+                video.preload = 'metadata';
+                bindMediaAutoScroll(video, 'loadedmetadata', smoothMediaScroll);
+                return video;
+            }
+
+            const link = document.createElement('a');
+            link.className = 'file-link';
+            link.href = msg.file_url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = `下载文件 · ${extractFileName(msg.content)}`;
+            return link;
+        }
+
+        function createPlaceholderNode(text) {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'file-placeholder';
+            placeholder.textContent = text || CLEANUP_PLACEHOLDER;
+            return placeholder;
+        }
+
+        function createFavoriteAction(messageId) {
+            const action = document.createElement('button');
+            action.type = 'button';
+            action.className = 'favorite-action';
+            action.dataset.sourceMessageId = String(messageId || '');
+            action.textContent = '★';
+            updateFavoriteActionState(action, favoritesBySourceId.has(Number(messageId)));
+
+            action.addEventListener('click', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const messageEl = action.closest('.message');
+                if (!messageEl) return;
+
+                await addFavoriteFromMessage(messageEl);
+            });
+
+            return action;
+        }
+
+        function updateFavoriteActionState(action, isActive) {
+            action.classList.toggle('active', isActive);
+            action.setAttribute('aria-pressed', String(isActive));
+            action.setAttribute('title', isActive ? '已收藏' : '收藏文本');
+        }
+
+        function applyMessageTone(messageEl) {
+            messageEl.classList.remove('self', 'other', 'system');
+
+            const info = messageEl.querySelector('.msg-info');
+            const isSystem = messageEl.dataset.system === 'true';
+            const timeLabel = messageEl.dataset.time || '';
+
+            if (isSystem) {
+                messageEl.classList.add('system');
+                info.textContent = timeLabel ? `系统提示 • ${timeLabel}` : '系统提示';
+                return;
+            }
+
+            const isSelf = Boolean(myIp) && messageEl.dataset.ip === myIp;
+            messageEl.classList.add(isSelf ? 'self' : 'other');
+            info.textContent = `${messageEl.dataset.ip || '未知设备'} • ${timeLabel}`;
+        }
+
+        function appendMessage(msg) {
+            messagesDiv.appendChild(createMessageElement(msg, { smoothMediaScroll: true }));
+        }
+
+        function markMessageAsCleaned(messageEl) {
+            const bubble = messageEl.querySelector('.msg-bubble');
+            if (!bubble) return;
+
+            bubble.innerHTML = '';
+            bubble.appendChild(createPlaceholderNode(CLEANUP_PLACEHOLDER));
+            messageEl.dataset.system = 'true';
+            messageEl.dataset.hasFile = 'false';
+            applyMessageTone(messageEl);
+        }
+
+        function refreshMessageOwnershipStyles() {
+            document.querySelectorAll('.message').forEach((messageEl) => {
+                applyMessageTone(messageEl);
+            });
+        }
+
+        function isFavoritableMessage(msg) {
+            const messageId = Number(msg?.id);
+            return Number.isInteger(messageId) && messageId > 0 && !msg?.file_url && !isSystemMessage(msg);
+        }
+
+        async function fetchFavorites() {
+            try {
+                const res = await fetch('/api/favorites');
+                if (!res.ok) throw new Error('Failed to fetch favorites');
+
+                const rows = await res.json();
+                setFavorites(Array.isArray(rows) ? rows : []);
+            } catch (error) {
+                console.error('加载收藏失败', error);
+                favorites = [];
+                favoritesBySourceId = new Map();
+                renderFavorites();
+                updateFavoriteActionStates();
+            }
+        }
+
+        function setFavorites(nextFavorites) {
+            favorites = nextFavorites;
+            favoritesBySourceId = new Map(
+                favorites
+                    .map((favorite) => [Number(favorite.source_message_id), favorite])
+                    .filter(([sourceMessageId]) => Number.isInteger(sourceMessageId) && sourceMessageId > 0)
+            );
+
+            renderFavorites();
+            updateFavoriteActionStates();
+        }
+
+        function renderFavorites() {
+            favoritesList.innerHTML = '';
+            favoritesCount.textContent = String(favorites.length);
+            favoritesEmpty.style.display = favorites.length ? 'none' : 'block';
+
+            const fragment = document.createDocumentFragment();
+
+            favorites.forEach((favorite) => {
+                const item = document.createElement('div');
+                const card = document.createElement('button');
+                const removeBtn = document.createElement('button');
+                const label = document.createElement('strong');
+                const preview = document.createElement('p');
+                const time = document.createElement('time');
+
+                item.className = 'favorite-item';
+
+                card.type = 'button';
+                card.className = 'favorite-card';
+                card.setAttribute('aria-label', '复制收藏内容');
+                card.addEventListener('click', async () => {
+                    const copied = await copyText(favorite.content);
+                    if (copied) {
+                        showToast('已复制收藏内容');
+                    } else {
+                        showToast('复制失败，请重试');
+                    }
+                });
+
+                label.textContent = '收藏文本';
+                preview.textContent = favorite.content || '';
+                time.dateTime = normalizeTimestamp(favorite.created_at).toISOString();
+                time.textContent = formatDateTime(favorite.created_at);
+
+                card.appendChild(label);
+                card.appendChild(preview);
+                card.appendChild(time);
+
+                removeBtn.type = 'button';
+                removeBtn.className = 'favorite-delete';
+                removeBtn.textContent = '×';
+                removeBtn.setAttribute('aria-label', '取消收藏');
+                removeBtn.title = '取消收藏';
+                removeBtn.addEventListener('click', async (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    await deleteFavorite(favorite.id);
+                });
+
+                item.appendChild(card);
+                item.appendChild(removeBtn);
+                fragment.appendChild(item);
+            });
+
+            favoritesList.appendChild(fragment);
+        }
+
+        function updateFavoriteActionStates() {
+            document.querySelectorAll('.favorite-action').forEach((action) => {
+                const messageId = Number(action.dataset.sourceMessageId);
+                updateFavoriteActionState(action, favoritesBySourceId.has(messageId));
+            });
+        }
+
+        async function addFavoriteFromMessage(messageEl) {
+            const sourceMessageId = Number(messageEl.dataset.messageId);
+            const content = messageEl.dataset.content || '';
+
+            if (!Number.isInteger(sourceMessageId) || sourceMessageId <= 0 || !content.trim()) {
+                showToast('这条消息暂不支持收藏');
+                return;
+            }
+
+            if (favoritesBySourceId.has(sourceMessageId)) {
+                showToast('这条消息已经收藏过了');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/favorites', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        source_message_id: sourceMessageId,
+                        content
+                    })
+                });
+
+                if (res.status === 409) {
+                    await fetchFavorites();
+                    showToast('这条消息已经收藏过了');
+                    return;
+                }
+
+                if (!res.ok) {
+                    throw new Error('Failed to create favorite');
+                }
+
+                showToast('已加入收藏');
+                await fetchFavorites();
+            } catch (error) {
+                console.error('收藏失败', error);
+                showToast('收藏失败，请重试');
+            }
+        }
+
+        async function deleteFavorite(favoriteId) {
+            try {
+                const res = await fetch(`/api/favorites/${favoriteId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!res.ok) {
+                    throw new Error('Failed to delete favorite');
+                }
+
+                showToast('已取消收藏');
+                await fetchFavorites();
+            } catch (error) {
+                console.error('取消收藏失败', error);
+                showToast('取消收藏失败，请重试');
+            }
+        }
+
+        function sendMessage() {
+            const rawText = messageInput.value;
+            if (!rawText.trim()) return;
+
+            purgeExpiredLocalActions();
+            pendingLocalActions.push({
+                kind: 'text',
+                content: rawText,
+                createdAt: Date.now()
+            });
+
+            socket.emit('chat message', rawText);
+            messageInput.value = '';
+            autoResize(messageInput);
+        }
+
+        function uploadFile(input) {
+            const files = Array.from(input.files || []);
+            if (!files.length) return;
+
+            input.value = '';
+            enqueueUploads(files);
+        }
+
+        function enqueueUploads(files) {
+            files.forEach((file) => {
+                uploadQueue = uploadQueue.then(() => performUpload(file));
+            });
+        }
+
+        function normalizeUploadFile(file, index = 0) {
+            if (!file) return null;
+
+            const hasName = typeof file.name === 'string' && file.name.trim();
+            if (hasName) return file;
+
+            const extension = inferFileExtension(file.type);
+            const fallbackName = `clipboard-${formatFileStamp(new Date())}-${index + 1}.${extension}`;
+
+            return new File([file], fallbackName, {
+                type: file.type || 'application/octet-stream',
+                lastModified: Date.now()
+            });
+        }
+
+        function inferFileExtension(type) {
+            if (!type) return 'bin';
+            const [major, minorRaw] = type.split('/');
+            const minor = (minorRaw || '').toLowerCase().split('+')[0];
+
+            if (!minor) return major === 'image' ? 'png' : 'bin';
+            if (minor === 'jpeg') return 'jpg';
+            if (minor === 'svg+xml') return 'svg';
+
+            return minor;
+        }
+
+        function formatFileStamp(date) {
+            const pad = (value) => String(value).padStart(2, '0');
+
+            return [
+                date.getFullYear(),
+                pad(date.getMonth() + 1),
+                pad(date.getDate())
+            ].join('') + '-' + [
+                pad(date.getHours()),
+                pad(date.getMinutes()),
+                pad(date.getSeconds())
+            ].join('');
+        }
+
+        function extractClipboardFiles(event) {
+            const clipboardData = event.clipboardData;
+            if (!clipboardData) return [];
+
+            const filesFromList = Array.from(clipboardData.files || [])
+                .map((file, index) => normalizeUploadFile(file, index))
+                .filter(Boolean);
+
+            if (filesFromList.length) {
+                return filesFromList;
+            }
+
+            return Array.from(clipboardData.items || [])
+                .filter((item) => item.kind === 'file')
+                .map((item, index) => normalizeUploadFile(item.getAsFile(), index))
+                .filter(Boolean);
+        }
+
+        function handlePasteUpload(event) {
+            const files = extractClipboardFiles(event);
+            if (!files.length) return;
+
+            event.preventDefault();
+            enqueueUploads(files);
+        }
+
+        function performUpload(file) {
+            return new Promise((resolve) => {
+                purgeExpiredLocalActions();
+                pendingLocalActions.push({
+                    kind: 'file',
+                    content: `[文件] ${file.name}`,
+                    fileType: file.type,
+                    createdAt: Date.now()
+                });
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                showUploadProgress(file.name);
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/upload', true);
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        progressFill.style.width = percent + '%';
+                        progressText.textContent = percent + '%';
+                    }
+                };
+
+                xhr.onload = () => {
+                    hideUploadProgress();
+
+                    if (xhr.status === 200) {
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            if (response && response.ip) {
+                                rememberMyIp(response.ip);
+                            }
+                        } catch (error) {
+                            console.error('解析上传响应失败', error);
+                        }
+                    } else {
+                        alert('上传失败');
+                    }
+
+                    resolve();
+                };
+
+                xhr.onerror = () => {
+                    hideUploadProgress();
+                    alert('上传出错');
+                    resolve();
+                };
+
+                xhr.send(formData);
+            });
+        }
+
+        async function cleanupFiles() {
+            if (!confirm('确定要清理所有物理文件吗？消息内容将保留，但文件将无法恢复。')) return;
+            const res = await fetch('/api/cleanup', { method: 'POST' });
+            if (!res.ok) alert('清理失败');
+        }
+
+        async function clearHistory() {
+            const confirmed = confirm('确定要清空所有聊天记录吗？该操作只删除消息历史，不删除上传文件，也不会影响收藏夹。');
+            if (!confirmed) return;
+
+            try {
+                const res = await fetch('/api/history/clear', { method: 'POST' });
+                if (!res.ok) {
+                    throw new Error('Failed to clear history');
+                }
+
+                messagesDiv.innerHTML = '';
+                showToast('聊天记录已清空');
+            } catch (error) {
+                console.error('清空聊天记录失败', error);
+                alert('清空聊天记录失败');
+            }
+        }
+
+        function autoResize(textarea) {
+            const minHeight = parseFloat(window.getComputedStyle(textarea).minHeight) || 58;
+            textarea.style.height = minHeight + 'px';
+            textarea.style.height = Math.max(minHeight, Math.min(textarea.scrollHeight, 180)) + 'px';
+        }
+
+        function showUploadProgress(fileName) {
+            progressFile.textContent = `正在上传 · ${fileName}`;
+            progressText.textContent = '0%';
+            progressFill.style.width = '0%';
+            progressContainer.style.display = 'block';
+        }
+
+        function hideUploadProgress() {
+            progressContainer.style.display = 'none';
+            progressFill.style.width = '0%';
+            progressText.textContent = '0%';
+            progressFile.textContent = '正在上传';
+        }
+
+        async function copyText(text) {
+            if (!text) return false;
+
+            try {
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                }
+            } catch (error) {
+                console.warn('Clipboard API 复制失败，尝试回退方案', error);
+            }
+
+            return fallbackCopyText(text);
+        }
+
+        function fallbackCopyText(text) {
+            const helper = document.createElement('textarea');
+            helper.value = text;
+            helper.setAttribute('readonly', '');
+            helper.style.position = 'fixed';
+            helper.style.opacity = '0';
+            helper.style.pointerEvents = 'none';
+            helper.style.left = '-9999px';
+
+            document.body.appendChild(helper);
+            helper.focus();
+            helper.select();
+
+            let copied = false;
+            try {
+                copied = document.execCommand('copy');
+            } catch (error) {
+                console.warn('回退复制失败', error);
+            }
+
+            helper.remove();
+            return copied;
+        }
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('visible');
+            window.clearTimeout(toastTimer);
+            toastTimer = window.setTimeout(() => {
+                toast.classList.remove('visible');
+            }, TOAST_DURATION);
+        }
+
+        function scrollToBottom(smooth = false) {
+            if (!smooth || prefersReducedMotion() || isHistoryHydrating) {
+                messagesDiv.style.scrollBehavior = 'auto';
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                requestAnimationFrame(() => {
+                    messagesDiv.style.scrollBehavior = 'auto';
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    requestAnimationFrame(() => {
+                        messagesDiv.style.scrollBehavior = '';
+                    });
+                });
+                return;
+            }
+
+            requestAnimationFrame(() => {
+                messagesDiv.scrollTo({
+                    top: messagesDiv.scrollHeight,
+                    behavior: 'smooth'
+                });
+            });
+        }
+
+        function prefersReducedMotion() {
+            return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        }
+
+        function bindMediaAutoScroll(mediaEl, eventName, smooth = true) {
+            const event = eventName || 'load';
+            const isReady = mediaEl.tagName === 'IMG'
+                ? mediaEl.complete
+                : mediaEl.readyState >= 1;
+
+            if (isReady) {
+                scrollToBottom(smooth);
+                return;
+            }
+
+            mediaEl.addEventListener(event, () => {
+                scrollToBottom(smooth);
+            }, { once: true });
+        }
+
+        function isSystemMessage(msg) {
+            return msg.content === CLEANUP_PLACEHOLDER;
+        }
+
+        function rememberMyIp(ip) {
+            if (!ip || myIp === ip) return;
+            myIp = ip;
+            localStorage.setItem(LOCAL_IP_KEY, ip);
+            refreshMessageOwnershipStyles();
+        }
+
+        function identifySelfFromEcho(msg) {
+            purgeExpiredLocalActions();
+
+            const expectedKind = msg.file_url ? 'file' : 'text';
+            const actionIndex = pendingLocalActions.findIndex((action) => {
+                if (action.kind !== expectedKind) return false;
+                if (action.content !== msg.content) return false;
+
+                if (expectedKind === 'file' && action.fileType && msg.file_type) {
+                    return action.fileType === msg.file_type;
+                }
+
+                return true;
+            });
+
+            if (actionIndex !== -1) {
+                pendingLocalActions.splice(actionIndex, 1);
+                rememberMyIp(msg.ip);
+            }
+        }
+
+        function purgeExpiredLocalActions() {
+            const now = Date.now();
+
+            while (pendingLocalActions.length && now - pendingLocalActions[0].createdAt > MAX_PENDING_ACTION_AGE) {
+                pendingLocalActions.shift();
+            }
+        }
+
+        function extractFileName(content) {
+            return (content || '').replace(/^\[文件\]\s*/, '') || '文件';
+        }
+
+        function formatTime(timestamp) {
+            const normalized = normalizeTimestamp(timestamp);
+            return normalized.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function formatDateTime(timestamp) {
+            const normalized = normalizeTimestamp(timestamp);
+            return normalized.toLocaleString([], {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function normalizeTimestamp(timestamp) {
+            if (timestamp instanceof Date) return timestamp;
+
+            const safeTimestamp = typeof timestamp === 'string'
+                ? timestamp.replace(' ', 'T')
+                : timestamp;
+            const parsed = new Date(safeTimestamp || Date.now());
+
+            if (Number.isNaN(parsed.getTime())) {
+                return new Date();
+            }
+
+            return parsed;
+        }
+
+        function hasDraggedFiles(event) {
+            return Array.from(event.dataTransfer?.types || []).includes('Files');
+        }
+
+        function showDragOverlay() {
+            dragOverlay.classList.add('active');
+        }
+
+        function hideDragOverlay() {
+            dragOverlay.classList.remove('active');
+        }
+
+        function setSidebarOpen(isOpen) {
+            document.body.classList.toggle('sidebar-open', isOpen);
+            sidebar.setAttribute('aria-hidden', String(!isOpen));
+            menuBtn.setAttribute('aria-expanded', String(isOpen));
+        }
+
+        function getResolvedTheme() {
+            if (themePreference === 'light' || themePreference === 'dark') {
+                return themePreference;
+            }
+
+            return systemThemeQuery.matches ? 'dark' : 'light';
+        }
+
+        function updateThemeControls() {
+            themeButtons.forEach((button) => {
+                const isActive = button.dataset.themeOption === themePreference;
+                button.classList.toggle('active', isActive);
+                button.setAttribute('aria-pressed', String(isActive));
+            });
+
+            if (themePreference === 'system') {
+                themeStatus.textContent = `跟随系统 · 当前为${getResolvedTheme() === 'dark' ? '夜间' : '日间'}模式`;
+                return;
+            }
+
+            themeStatus.textContent = `手动锁定 · ${themePreference === 'dark' ? '夜间' : '日间'}模式`;
+        }
+
+        function applyThemePreference(preference) {
+            const nextPreference = ['system', 'light', 'dark'].includes(preference) ? preference : 'system';
+            themePreference = nextPreference;
+
+            if (nextPreference === 'system') {
+                document.documentElement.removeAttribute('data-theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', nextPreference);
+            }
+
+            localStorage.setItem(THEME_PREFERENCE_KEY, nextPreference);
+            updateThemeControls();
+        }
+
+        window.addEventListener('dragenter', (event) => {
+            if (!hasDraggedFiles(event)) return;
+            event.preventDefault();
+            dragDepth += 1;
+            showDragOverlay();
+        });
+
+        window.addEventListener('dragover', (event) => {
+            if (!hasDraggedFiles(event) && !dragOverlay.classList.contains('active')) return;
+            event.preventDefault();
+            if (hasDraggedFiles(event)) {
+                showDragOverlay();
+            }
+        });
+
+        window.addEventListener('dragleave', (event) => {
+            if (!dragOverlay.classList.contains('active')) return;
+            event.preventDefault();
+            dragDepth = Math.max(0, dragDepth - 1);
+
+            const leftWindow =
+                event.clientX <= 0 ||
+                event.clientY <= 0 ||
+                event.clientX >= window.innerWidth ||
+                event.clientY >= window.innerHeight;
+
+            if (dragDepth === 0 || leftWindow) {
+                dragDepth = 0;
+                hideDragOverlay();
+            }
+        });
+
+        window.addEventListener('drop', (event) => {
+            if (!dragOverlay.classList.contains('active') && !hasDraggedFiles(event)) return;
+            event.preventDefault();
+            dragDepth = 0;
+            hideDragOverlay();
+
+            const files = Array.from(event.dataTransfer?.files || []);
+            if (files.length) {
+                enqueueUploads(files);
+            }
+        });
+
+        fileInput.addEventListener('change', () => uploadFile(fileInput));
+        sendBtn.addEventListener('click', sendMessage);
+        clearHistoryBtn.addEventListener('click', clearHistory);
+        cleanupBtn.addEventListener('click', cleanupFiles);
+        window.addEventListener('paste', handlePasteUpload);
+        menuBtn.addEventListener('click', () => setSidebarOpen(true));
+        sidebarClose.addEventListener('click', () => setSidebarOpen(false));
+        sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
+        themeButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                applyThemePreference(button.dataset.themeOption || 'system');
+            });
+        });
+
+        messageInput.addEventListener('input', () => autoResize(messageInput));
+        messageInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && document.body.classList.contains('sidebar-open')) {
+                setSidebarOpen(false);
+            }
+        });
+
+        if (typeof systemThemeQuery.addEventListener === 'function') {
+            systemThemeQuery.addEventListener('change', () => {
+                if (themePreference === 'system') {
+                    updateThemeControls();
+                }
+            });
+        } else if (typeof systemThemeQuery.addListener === 'function') {
+            systemThemeQuery.addListener(() => {
+                if (themePreference === 'system') {
+                    updateThemeControls();
+                }
+            });
+        }
+
+        applyThemePreference(themePreference);
+        fetchFavorites();
+        autoResize(messageInput);
+    </script>
+</body>
+</html>
