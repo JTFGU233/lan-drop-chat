@@ -46,7 +46,7 @@ npm start
 http://localhost:3000
 ```
 
-### Docker 运行
+### Docker 运行（源码构建）
 
 ```bash
 docker compose up -d --build
@@ -66,13 +66,47 @@ docker compose up -d --build
 
 ## 部署说明
 
-这个项目适合部署在：
+这个项目适合部署在任何支持 Docker 的设备上，例如：
 
-- 群晖 NAS
+- 群晖 / 威联通 / 极空间 / TrueNAS 等 NAS
 - 家用 Linux 小主机
 - 常开的局域网服务器
+- 任意可以运行 Docker / Container Manager 的设备
 
 只要浏览器能访问服务地址，就可以直接使用，不需要安装客户端。
+
+### 一键部署（推荐）
+
+如果你已经把镜像发布到 GHCR，可以直接使用下面这份 `docker-compose.yml`：
+
+```yaml
+services:
+  lan-drop-chat:
+    image: ghcr.io/jtfgu233/lan-drop-chat:latest
+    container_name: lan-drop-chat
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+```
+
+然后在同目录执行：
+
+```bash
+docker compose up -d
+```
+
+部署完成后，通过下面地址访问：
+
+```text
+http://你的NAS或服务器IP:3000
+```
+
+如果你的设备界面支持通过 YML / Compose 直接创建项目，把上面的内容粘贴进去即可。
 
 ## 开源许可
 
