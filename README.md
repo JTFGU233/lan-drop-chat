@@ -212,14 +212,41 @@ docker compose up -d --build
 
 ### 方式 B：改成镜像发布模式
 
-如果你希望 NAS 不再依赖本地源码目录，而是直接拉取构建好的镜像，则需要改成：
+本项目已经内置 GitHub Actions 工作流：
 
-- GitHub Actions 负责构建 Docker 镜像
-- 推送到 Docker Hub 或 GHCR
-- 群晖 `docker-compose.yml` 使用：
+```text
+.github/workflows/docker-image.yml
+```
+
+它会在以下时机自动构建并推送 GHCR 镜像：
+
+- push 到 `main`
+- push `v*` tag
+- 手动触发 `workflow_dispatch`
+
+如果你希望 NAS 不再依赖本地源码目录，而是直接拉取构建好的镜像，则可以使用这个工作流产出的镜像：
+
+- 默认镜像地址：
+
+```text
+ghcr.io/jtfgu233/lan-drop-chat:latest
+```
+
+- 群晖 `docker-compose.yml` 可改为：
 
 ```yaml
-image: ghcr.io/your-name/lan-drop-chat:latest
+services:
+  lan-drop-chat:
+    image: ghcr.io/jtfgu233/lan-drop-chat:latest
+    container_name: lan-drop-chat
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
 ```
 
 然后在 NAS 上更新时执行：
@@ -235,6 +262,19 @@ docker compose up -d
 - NAS 不需要保留完整源码
 - 更适合长期维护
 - 依然不是“自动拉 GitHub 代码”，而是“手动或定时拉镜像”
+
+### GHCR 首次使用说明
+
+第一次推送镜像后，你可能需要在 GitHub 仓库或 Packages 页面确认：
+
+- `ghcr.io/jtfgu233/lan-drop-chat` 包已生成
+- 如果仓库是公开项目，建议将该 package 也设置为 `public`
+
+如果群晖拉取公开 GHCR 镜像失败，再检查：
+
+- 仓库 Actions 是否执行成功
+- 包可见性是否为公开
+- 群晖 Docker 是否可访问 `ghcr.io`
 
 ### 结论
 
@@ -273,10 +313,18 @@ git push -u origin main
 - `uploads/`
 - 日志和系统文件
 
+### 4. 开源许可证
+
+本项目已经附带：
+
+```text
+LICENSE
+```
+
+当前使用 `MIT License`。
+
 ## 后续可扩展方向
 
-- GitHub Actions 自动构建镜像
-- Docker Hub / GHCR 镜像发布
 - 设备别名
 - 导出聊天记录
 - 收藏导出
@@ -284,13 +332,4 @@ git push -u origin main
 
 ## 许可
 
-如果你准备公开发布到 GitHub，建议补一个许可证文件，比如：
-
-- `MIT`
-- `Apache-2.0`
-
-如果你愿意，我下一步可以继续帮你补：
-
-1. `LICENSE`
-2. `GitHub Actions` 自动构建 Docker 镜像
-3. 一份适合群晖直接拉镜像的 `docker-compose` 版本
+本项目使用 `MIT License`。
