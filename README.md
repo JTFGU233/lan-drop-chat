@@ -77,7 +77,9 @@ docker compose up -d --build
 
 ### 一键部署（推荐）
 
-如果你已经把镜像发布到 GHCR，可以直接使用下面这份 `docker-compose.yml`：
+如果目标设备已经安装了 Docker 或容器管理器（如 Container Manager），可以直接使用下面这份 `docker-compose.yml`。
+
+这种方式不需要额外安装 Node.js、npm 或拉取源码，复制 YML 后即可部署：
 
 ```yaml
 services:
@@ -107,6 +109,11 @@ http://你的NAS或服务器IP:3000
 ```
 
 如果你的设备界面支持通过 YML / Compose 直接创建项目，把上面的内容粘贴进去即可。
+
+换句话说：
+
+- 如果设备已经能运行 Docker，那么只拿这一份 YML 就可以部署
+- 如果设备还没有安装 Docker，那么需要先安装 Docker，再使用这份 YML
 
 ## 开源许可
 
