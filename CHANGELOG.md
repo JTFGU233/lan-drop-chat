@@ -1,5 +1,61 @@
 # Changelog
 
+## v1.7.0 - 2026-09-03
+
+### 重写
+
+- 整个前端 `public/index.html` 重写：从 4274 行精简到约 3426 行
+- 视觉系统：玻璃拟态侧栏 + blue→teal 品牌色 + light/dark/system 三态主题
+- 自定义 confirm modal 替代浏览器 `confirm()`，统一 toast 顶部提示
+
+### 界面精修
+
+- 桌面端移除多余的顶部标题栏，让类型筛选直接贴合主区域顶部；移动端保留紧凑栏作为侧栏入口
+- 桌面端仅保留侧栏折叠按钮，移动端仅使用顶部菜单按钮打开抽屉，避免重复入口
+- 移动端输入区补充 flex 宽度约束，修复窄屏下发送按钮被裁切的问题
+- 触屏设备上的消息操作工具栏改为点按消息后显示，减少操作按钮常驻造成的视觉干扰
+- 收藏卡片改为“标题 + 正文预览”两段式布局，长文本不再挤成一块
+- 统一帮助、取消、上一张、下一张等操作按钮为 SVG 图标
+- 补充全局 `prefers-reduced-motion` 降级规则，连接状态 pulse 和弹层动效会尊重系统设置
+
+### 新功能
+
+- 文本气泡整体点击即复制（命中按钮 / 链接 / 文本选区时不触发）
+- 桌面端侧栏可折叠到 64px 图标轨，状态记忆到 localStorage
+- 站内图片 Lightbox 替代 `window.open`，支持 ←/→ 切换、Esc 关闭、单图自动隐藏箭头
+- 上传进度卡：百分比 + 已传字节 + 速度 + 剩余时间 + 取消按钮（`xhr.abort`）+ 队列指示 `[1/N]`
+- 右下角 `?` 浮按钮，唤出快捷键 popover
+- 类型筛选 chip 条（全部 / 文字 / 图片 / 文件）
+- 日期分隔行（今天 / 昨天 / N 天前 / 月日）
+- 单条消息删除：hover 工具条加垃圾桶图标，自定义二次确认；服务端事务删 DB + 异步删物理文件，不级联收藏
+- 断线时显示顶部红色 banner，并同步侧栏连接状态
+- 设备图标头像（统一"显示器" SVG），背景按 IP 哈希渐变着色
+
+### 修复
+
+- 中文文件名上传后乱码：`multipart/form-data` filename 从 latin1 解码为 utf8（3 处替换；旧已上传文件不会自动修复）
+- 折叠态侧栏按钮文字"竖排"乱码：button 文字用 `<span>` 包裹，CSS 选择器命中
+- 折叠态收藏空状态文字未隐藏：JS 写入的 inline `style.display: block` 被 CSS `!important` 正确覆盖
+- 折叠按钮位置错乱：`.sidebar-head` 折叠态改为 `flex-direction: column`
+- 浏览器默认蓝色 focus outline：全局 `button:focus-visible` 自定义 ring
+
+### 后端
+
+- `server.js` 新增 `decodeOriginalName(name)` helper
+- 新增 `DELETE /api/messages/:id` 路由
+- 新增 Socket 事件 `message deleted`
+
+### 接口约定
+
+- 删除消息接口：路径名、字段、广播事件名都已在前端写死，请勿随意改动
+- Socket 事件名 / 上传字段名 `file`/`files` / 消息对象字段（id/ip/content/file_url/file_type/message_type/timestamp/group_items）保持不变
+
+### 升级说明
+
+- 服务启动时会自动创建图片组所需的数据表，并为旧消息补齐 `message_type`，无需手动迁移数据库
+- 升级时请保留 `data/` 和 `uploads/` 目录，以保留聊天记录和已上传文件
+- 新版本会正确解码之后上传的中文文件名，历史文件名不会自动修改
+
 ## v1.6.0 - 2026-04-11
 
 ### Added
@@ -15,7 +71,7 @@
 
 - 后端消息模型新增 `message_type` 与图片组子项存储，历史记录、清空记录、物理清理逻辑已兼容图片组
 - 图片组卡片重做为固定预览框，避免不同尺寸图片遮挡文字
-- 触屏设备上的消息操作按钮改为常显，避免依赖 hover
+- 触屏设备上的消息操作按钮改为点按消息后显示，避免依赖 hover 且减少视觉干扰
 
 ### Notes
 

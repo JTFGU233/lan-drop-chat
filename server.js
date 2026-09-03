@@ -66,6 +66,10 @@ function normalizeIp(value = '') {
   return String(value || '').replace('::ffff:', '');
 }
 
+function decodeOriginalName(name) {
+  return Buffer.from(name || '', 'latin1').toString('utf8');
+}
+
 function resolveMessageType(row) {
   if (row?.message_type) return row.message_type;
   if (row?.content === CLEANUP_PLACEHOLDER) return 'system';
@@ -80,7 +84,7 @@ function buildGroupContent(count) {
 function buildFileMessageFromUpload(ip, file) {
   return {
     ip,
-    content: `[文件] ${file.originalname}`,
+    content: `[文件] ${decodeOriginalName(file.originalname)}`,
     file_url: `/uploads/${file.filename}`,
     file_type: file.mimetype,
     message_type: 'file'
@@ -227,7 +231,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
+    cb(null, uniqueSuffix + '-' + decodeOriginalName(file.originalname));
   }
 });
 
@@ -308,7 +312,7 @@ app.post('/upload/images', upload.array('files'), async (req, res) => {
         const item = {
           message_id: messageId,
           sort_order: index,
-          file_name: file.originalname,
+          file_name: decodeOriginalName(file.originalname),
           file_url: `/uploads/${file.filename}`,
           file_type: file.mimetype
         };
@@ -414,6 +418,56 @@ app.delete('/api/favorites/:id', (req, res) => {
     io.emit('favorites updated');
     res.json({ success: true });
   });
+});
+
+app.delete('/api/messages/:id', async (req, res) => {
+  const messageId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(messageId) || messageId <= 0) {
+    return res.status(400).json({ error: 'Invalid message id.' });
+  }
+
+  let filesToDelete = [];
+
+  try {
+    await withTransaction(async () => {
+      const row = await getAsync(
+        `SELECT id, file_url, message_type FROM messages WHERE id = ?`,
+        [messageId]
+      );
+      if (!row) {
+        const err = new Error('Message not found.');
+        err.status = 404;
+        throw err;
+      }
+
+      if (row.message_type === 'image_group') {
+        const items = await allAsync(
+          `SELECT file_url FROM message_group_items WHERE message_id = ?`,
+          [messageId]
+        );
+        filesToDelete = items.map((it) => it.file_url).filter(Boolean);
+      } else if (row.message_type === 'file' && row.file_url) {
+        filesToDelete = [row.file_url];
+      }
+
+      await runAsync(`DELETE FROM message_group_items WHERE message_id = ?`, [messageId]);
+      await runAsync(`DELETE FROM messages WHERE id = ?`, [messageId]);
+    });
+
+    io.emit('message deleted', { id: messageId });
+    res.json({ success: true, id: messageId });
+
+    filesToDelete.forEach((fileUrl) => {
+      const basename = path.basename(fileUrl);
+      const filePath = path.join(UPLOADS_DIR, basename);
+      fs.remove(filePath).catch((err) => console.error('删除物理文件失败', filePath, err));
+    });
+  } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.post('/api/history/clear', async (req, res) => {
