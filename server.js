@@ -12,7 +12,7 @@ const io = new Server(server, {
   maxHttpBufferSize: 1e8, // 100MB 限制仅针对消息内容，文件上传由 multer 处理
 });
 
-const PORT = 3000;
+const PORT = Number.parseInt(process.env.PORT, 10) || 3000;
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'chat.db');
@@ -62,8 +62,115 @@ function allAsync(sql, params = []) {
   });
 }
 
+// === Timestamp handling ===
+// Storage: messages.timestamp / favorites.created_at hold SQLite-style UTC strings
+// ("YYYY-MM-DD HH:MM:SS", the same format CURRENT_TIMESTAMP produces) so ORDER BY
+// stays lexicographically consistent with legacy rows.
+// API contract: every timestamp sent to clients is ISO 8601 UTC with a trailing "Z"
+// (e.g. "2026-05-24T08:06:27.000Z"), or null when the stored value is unparseable.
+// Naive strings without a zone marker are interpreted as UTC, because SQLite's
+// CURRENT_TIMESTAMP / datetime('now') are UTC.
+const NAIVE_OR_ISO_TS_RE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:[.,](\d+))?)?)?\s*(Z|UTC|GMT|[+-]\d{2}(?::?\d{2})?)?$/i;
+
+function parseStoredTimestamp(value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === 'number' || (typeof value === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(value))) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return null;
+    let ms;
+    if (num >= 1e11) ms = num; // epoch milliseconds
+    else if (num >= 1e8) ms = num * 1000; // epoch seconds
+    else if (num >= 1e6 && num < 1e7) ms = (num - 2440587.5) * 86400000; // SQLite julianday()
+    else return null;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  if (typeof value !== 'string') return null;
+  const str = value.trim();
+  const m = NAIVE_OR_ISO_TS_RE.exec(str);
+
+  if (m) {
+    const [, y, mo, d, h = '0', mi = '0', sec = '0', frac = '', zone] = m;
+    const ms = frac ? Math.round(Number(`0.${frac}`) * 1000) : 0;
+    let epoch = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(sec), ms);
+
+    if (zone && !/^(Z|UTC|GMT)$/i.test(zone)) {
+      const zm = /^([+-])(\d{2}):?(\d{2})?$/.exec(zone);
+      if (zm) {
+        const offsetMin = (Number(zm[2]) * 60 + Number(zm[3] || 0)) * (zm[1] === '-' ? -1 : 1);
+        epoch -= offsetMin * 60000;
+      }
+    }
+
+    const date = new Date(epoch);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  // Last resort for other formats that carry their own zone (e.g. RFC 2822).
+  const fallback = new Date(str);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+function toApiTimestamp(value) {
+  const date = parseStoredTimestamp(value);
+  return date ? date.toISOString() : null;
+}
+
+function toDbTimestamp(date = new Date()) {
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 function normalizeIp(value = '') {
   return String(value || '').replace('::ffff:', '');
+}
+
+// === Device identity ===
+// Clients report a coarse device kind (socket auth / X-Device header); the server
+// whitelists it and falls back to parsing the User-Agent. Stored per message so
+// every device sees "iPhone" / "Mac" instead of a bare IP.
+const DEVICE_KINDS = new Set(['iphone', 'ipad', 'android', 'android-tablet', 'mac', 'windows', 'linux', 'other']);
+
+function resolveDevice(hint, userAgent = '') {
+  const kind = String(hint || '').trim().toLowerCase();
+  if (DEVICE_KINDS.has(kind)) return kind;
+
+  const ua = String(userAgent || '');
+  if (/iPhone|iPod/.test(ua)) return 'iphone';
+  if (/iPad/.test(ua)) return 'ipad';
+  if (/Android/.test(ua)) return /Mobile/.test(ua) ? 'android' : 'android-tablet';
+  if (/Macintosh|Mac OS X/.test(ua)) return 'mac';
+  if (/Windows/.test(ua)) return 'windows';
+  if (/Linux|CrOS/.test(ua)) return 'linux';
+  return 'other';
+}
+
+function deviceFromRequest(req) {
+  return resolveDevice(req.get('X-Device'), req.get('User-Agent'));
+}
+
+function uploadPathFromUrl(fileUrl) {
+  return path.join(UPLOADS_DIR, path.basename(String(fileUrl || '')));
+}
+
+async function statFileSize(fileUrl) {
+  if (!fileUrl) return null;
+  try {
+    const stat = await fs.stat(uploadPathFromUrl(fileUrl));
+    return stat.size;
+  } catch {
+    return null;
+  }
+}
+
+// Stored names are "<timestamp>-<random>-<original name>"; strip the prefix for downloads.
+function originalNameFromStored(fileUrl) {
+  return path.basename(String(fileUrl || '')).replace(/^\d+-\d+-/, '') || 'download';
 }
 
 function decodeOriginalName(name) {
@@ -81,9 +188,10 @@ function buildGroupContent(count) {
   return `[图片组] ${count} 张图片`;
 }
 
-function buildFileMessageFromUpload(ip, file) {
+function buildFileMessageFromUpload(ip, device, file) {
   return {
     ip,
+    device,
     content: `[文件] ${decodeOriginalName(file.originalname)}`,
     file_url: `/uploads/${file.filename}`,
     file_type: file.mimetype,
@@ -126,6 +234,10 @@ async function initializeDatabase() {
 
   if (!hasMessageType) {
     await runAsync(`ALTER TABLE messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'text'`);
+  }
+
+  if (!columns.some((column) => column.name === 'device')) {
+    await runAsync(`ALTER TABLE messages ADD COLUMN device TEXT`);
   }
 
   await runAsync(
@@ -174,7 +286,8 @@ async function fetchGroupItemsByMessageIds(messageIds) {
 async function hydrateMessages(rows) {
   const normalizedRows = rows.map((row) => ({
     ...row,
-    message_type: resolveMessageType(row)
+    message_type: resolveMessageType(row),
+    timestamp: toApiTimestamp(row.timestamp)
   }));
 
   const imageGroupIds = normalizedRows
@@ -183,9 +296,14 @@ async function hydrateMessages(rows) {
 
   const groupItemsByMessageId = await fetchGroupItemsByMessageIds(imageGroupIds);
 
-  return normalizedRows.map((row) => ({
-    ...row,
-    group_items: groupItemsByMessageId.get(row.id) || []
+  // File sizes are read from disk (not stored), so cleaned-up files report null.
+  return Promise.all(normalizedRows.map(async (row) => {
+    const items = groupItemsByMessageId.get(row.id) || [];
+    return {
+      ...row,
+      file_size: row.message_type === 'file' ? await statFileSize(row.file_url) : null,
+      group_items: await Promise.all(items.map(async (item) => ({ ...item, file_size: await statFileSize(item.file_url) })))
+    };
   }));
 }
 
@@ -222,6 +340,15 @@ async function withTransaction(work) {
 }
 
 app.use(express.static('public'));
+// `?download` forces a save dialog with the original file name instead of inline display.
+app.use('/uploads', (req, res, next) => {
+  if (req.query.download !== undefined) {
+    let storedPath = req.path;
+    try { storedPath = decodeURIComponent(req.path); } catch { /* keep raw path */ }
+    res.attachment(originalNameFromStored(storedPath));
+  }
+  next();
+});
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.json());
 
@@ -247,7 +374,7 @@ function getFavoriteRows(res) {
      ORDER BY created_at DESC, id DESC`,
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json(rows);
+      res.json(rows.map((row) => ({ ...row, created_at: toApiTimestamp(row.created_at) })));
     }
   );
 }
@@ -258,19 +385,22 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   }
 
   const ip = normalizeIp(req.ip);
-  const fileData = buildFileMessageFromUpload(ip, req.file);
+  const fileData = buildFileMessageFromUpload(ip, deviceFromRequest(req), req.file);
+
+  const dbTimestamp = toDbTimestamp();
 
   try {
     const result = await runAsync(
-      `INSERT INTO messages (ip, content, file_url, file_type, message_type)
-       VALUES (?, ?, ?, ?, ?)`,
-      [fileData.ip, fileData.content, fileData.file_url, fileData.file_type, fileData.message_type]
+      `INSERT INTO messages (ip, device, content, file_url, file_type, message_type, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [fileData.ip, fileData.device, fileData.content, fileData.file_url, fileData.file_type, fileData.message_type, dbTimestamp]
     );
 
     const message = {
       id: result.lastID,
       ...fileData,
-      timestamp: new Date().toISOString(),
+      file_size: req.file.size,
+      timestamp: toApiTimestamp(dbTimestamp),
       group_items: []
     };
 
@@ -294,15 +424,17 @@ app.post('/upload/images', upload.array('files'), async (req, res) => {
   }
 
   const ip = normalizeIp(req.ip);
-  const timestamp = new Date().toISOString();
+  const device = deviceFromRequest(req);
+  const dbTimestamp = toDbTimestamp();
+  const timestamp = toApiTimestamp(dbTimestamp);
   const content = buildGroupContent(files.length);
 
   try {
     const message = await withTransaction(async () => {
       const insert = await runAsync(
-        `INSERT INTO messages (ip, content, file_url, file_type, message_type)
-         VALUES (?, ?, ?, ?, ?)`,
-        [ip, content, null, null, 'image_group']
+        `INSERT INTO messages (ip, device, content, file_url, file_type, message_type, timestamp)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [ip, device, content, null, null, 'image_group', dbTimestamp]
       );
 
       const messageId = insert.lastID;
@@ -325,16 +457,19 @@ app.post('/upload/images', upload.array('files'), async (req, res) => {
 
         groupItems.push({
           id: itemInsert.lastID,
-          ...item
+          ...item,
+          file_size: file.size
         });
       }
 
       return {
         id: messageId,
         ip,
+        device,
         content,
         file_url: null,
         file_type: null,
+        file_size: null,
         message_type: 'image_group',
         timestamp,
         group_items: groupItems
@@ -382,16 +517,17 @@ app.post('/api/favorites', async (req, res) => {
       return res.status(400).json({ error: 'Content is required.' });
     }
 
+    const createdAt = toDbTimestamp();
     const insert = await runAsync(
-      `INSERT INTO favorites (source_message_id, content) VALUES (?, ?)`,
-      [sourceMessageId, favoriteContent]
+      `INSERT INTO favorites (source_message_id, content, created_at) VALUES (?, ?, ?)`,
+      [sourceMessageId, favoriteContent, createdAt]
     );
 
     const favorite = {
       id: insert.lastID,
       source_message_id: sourceMessageId,
       content: favoriteContent,
-      created_at: new Date().toISOString()
+      created_at: toApiTimestamp(createdAt)
     };
 
     io.emit('favorites updated');
@@ -511,6 +647,9 @@ app.post('/api/cleanup', async (req, res) => {
 
 io.on('connection', (socket) => {
   const ip = normalizeIp(socket.handshake.address);
+  const device = resolveDevice(socket.handshake.auth?.device, socket.handshake.headers['user-agent']);
+
+  socket.emit('whoami', { ip, device });
 
   getHistoryRows()
     .then((rows) => {
@@ -521,8 +660,11 @@ io.on('connection', (socket) => {
     });
 
   socket.on('chat message', async (msgContent) => {
+    if (typeof msgContent !== 'string' || !msgContent.trim()) return;
+
     const msgData = {
       ip,
+      device,
       content: msgContent,
       file_url: null,
       file_type: null,
@@ -530,17 +672,20 @@ io.on('connection', (socket) => {
       group_items: []
     };
 
+    const dbTimestamp = toDbTimestamp();
+
     try {
       const result = await runAsync(
-        `INSERT INTO messages (ip, content, file_url, file_type, message_type)
-         VALUES (?, ?, ?, ?, ?)`,
-        [msgData.ip, msgData.content, msgData.file_url, msgData.file_type, msgData.message_type]
+        `INSERT INTO messages (ip, device, content, file_url, file_type, message_type, timestamp)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [msgData.ip, msgData.device, msgData.content, msgData.file_url, msgData.file_type, msgData.message_type, dbTimestamp]
       );
 
       io.emit('chat message', {
+        file_size: null,
         id: result.lastID,
         ...msgData,
-        timestamp: new Date().toISOString()
+        timestamp: toApiTimestamp(dbTimestamp)
       });
     } catch (error) {
       console.error('Failed to insert chat message', error);
